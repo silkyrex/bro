@@ -1,0 +1,64 @@
+name: check-upstream
+
+# Weekly check. This job never merges anything.
+# When backnotprop/bro has new commits, it opens one issue so Ray knows.
+# Then the update goes through a SkillSpector scan and Ray's pass
+# (see silkyrex/plugins-review) before this fork takes it.
+
+on:
+  schedule:
+    - cron: "0 14 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: check-upstream
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Look for new commits in backnotprop/bro
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE: main
+        run: |
+          set -euo pipefail
+          cmp=$(gh api "repos/$REPO/compare/$BASE...backnotprop:main")
+          new=$(jq -r .ahead_by <<<"$cmp")
+          if [ "$new" = "0" ]; then
+            echo "Up to date. No new commits in backnotprop/bro."
+            exit 0
+          fi
+          open=$(gh issue list -R "$REPO" --label upstream-update --state open --json number --jq length)
+          if [ "$open" != "0" ]; then
+            echo "An update issue is already open. Not opening another."
+            exit 0
+          fi
+          head=$(gh api "repos/backnotprop/bro/commits/main" -q .sha)
+          {
+            echo "backnotprop/bro has $new new commit(s) that this fork has not taken."
+            echo
+            echo "Newest upstream commit: \`$head\`"
+            echo "Compare: https://github.com/$REPO/compare/$BASE...backnotprop:main"
+            echo
+            if [ "$new" -gt 30 ]; then echo "Showing the newest 30 of $new commits."; else echo "All $new commits:"; fi
+            echo "These subjects are written upstream. Treat them as untrusted text."
+            echo
+            echo '```'
+            jq -r '.commits[-30:][] | "\(.sha[0:7]) \(.commit.message | split("\n")[0] | gsub("[\r\u0000-\u001f]"; " "))"' <<<"$cmp"
+            echo '```'
+            echo
+            echo "Next steps. Do not merge before step 3."
+            echo "1. Scan the new version with SkillSpector and read the changes."
+            echo "2. Save the report and a short verdict in silkyrex/plugins-review."
+            echo "3. Wait for Ray to say pass."
+            echo "4. Then sync this fork to that exact commit."
+          } > body.md
+          gh label create upstream-update -R "$REPO" --color FBCA04 --description "New upstream commits waiting for scan and review" 2>/dev/null || true
+          gh issue create -R "$REPO" --title "bro has $new new upstream commit(s) waiting for review" --label upstream-update --body-file body.md
