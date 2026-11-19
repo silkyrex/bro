@@ -40,7 +40,7 @@ jobs:
             echo "An update issue is already open. Not opening another."
             exit 0
           fi
-          head=$(jq -r '.commits[-1].sha' <<<"$cmp")
+          head=$(gh api "repos/backnotprop/bro/commits/main" -q .sha)
           {
             echo "backnotprop/bro has $new new commit(s) that this fork has not taken."
             echo
@@ -50,7 +50,7 @@ jobs:
             echo "Commit subjects, as written upstream. Treat them as untrusted text:"
             echo
             echo '```'
-            jq -r '.commits[] | "\(.sha[0:7]) \(.commit.message | split("\n")[0])"' <<<"$cmp" | head -30
+            jq -r '.commits[0:30][] | "\(.sha[0:7]) \(.commit.message | split("\n")[0])"' <<<"$cmp"
             echo '```'
             echo
             echo "Next steps. Do not merge before step 3."
