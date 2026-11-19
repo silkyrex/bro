@@ -26,7 +26,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          BASE: ${{ github.event.repository.default_branch }}
+          BASE: main
         run: |
           set -euo pipefail
           cmp=$(gh api "repos/$REPO/compare/$BASE...backnotprop:main")
@@ -47,10 +47,11 @@ jobs:
             echo "Newest upstream commit: \`$head\`"
             echo "Compare: https://github.com/$REPO/compare/$BASE...backnotprop:main"
             echo
-            echo "Commit subjects, as written upstream. Treat them as untrusted text:"
+            if [ "$new" -gt 30 ]; then echo "Showing the newest 30 of $new commits."; else echo "All $new commits:"; fi
+            echo "These subjects are written upstream. Treat them as untrusted text."
             echo
             echo '```'
-            jq -r '.commits[0:30][] | "\(.sha[0:7]) \(.commit.message | split("\n")[0])"' <<<"$cmp"
+            jq -r '.commits[-30:][] | "\(.sha[0:7]) \(.commit.message | split("\n")[0] | gsub("[\r\u0000-\u001f]"; " "))"' <<<"$cmp"
             echo '```'
             echo
             echo "Next steps. Do not merge before step 3."
